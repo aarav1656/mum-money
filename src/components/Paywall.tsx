@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSubscriptionStore } from "@/store/subscriptionStore";
+import { PurchasesPackage } from "react-native-purchases";
 
 interface PaywallProps {
   onClose: () => void;
@@ -16,66 +17,105 @@ interface PaywallProps {
 }
 
 export default function Paywall({ onClose, feature }: PaywallProps) {
-  const { purchasePackage, restorePurchases, isLoading } = useSubscriptionStore();
-  const [selectedPlan, setSelectedPlan] = useState<"plus_annual" | "plus_monthly" | "pro_annual" | "pro_monthly">("plus_annual");
+  const { packages, purchasePackage, restorePurchases, isLoading } =
+    useSubscriptionStore();
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const plans = [
-    {
-      id: "plus_annual" as const,
-      name: "Plus Annual",
-      price: "£3.33/mo",
-      period: "£39.99 billed annually",
-      badge: "Best Value",
-      savings: "Save £20/year",
-    },
-    {
-      id: "plus_monthly" as const,
-      name: "Plus Monthly",
-      price: "£4.99/mo",
-      period: "Billed monthly",
-      badge: null,
-      savings: null,
-    },
-    {
-      id: "pro_annual" as const,
-      name: "Pro Annual",
-      price: "£5.83/mo",
-      period: "£69.99 billed annually",
-      badge: "Most Popular",
-      savings: "Save £38/year",
-    },
-    {
-      id: "pro_monthly" as const,
-      name: "Pro Monthly",
-      price: "£8.99/mo",
-      period: "Billed monthly",
-      badge: null,
-      savings: null,
-    },
-  ];
+  // Find monthly and annual packages from RevenueCat
+  const monthlyPkg = packages.find(
+    (p) => p.identifier.includes("monthly") || p.identifier === "$rc_monthly"
+  );
+  const annualPkg = packages.find(
+    (p) => p.identifier.includes("annual") || p.identifier === "$rc_annual"
+  );
 
-  const plusFeatures = [
-    "Unlimited smart swaps",
-    "Full recipe library + meal planner",
-    "All investing lessons",
-    "Savings goals with progress tracking",
-    "Community forum access",
-    "No ads",
-  ];
+  const hasRealPackages = monthlyPkg || annualPkg;
 
-  const proExtras = [
-    "Everything in Plus, and:",
-    "Personalised weekly savings reports",
-    "Investment simulators",
-    "Family budget collaboration",
-    "Priority support",
-    "Early access to new features",
+  // Calculate savings for annual
+  const savingsPercent =
+    monthlyPkg && annualPkg
+      ? Math.round(
+          ((monthlyPkg.product.price * 12 - annualPkg.product.price) /
+            (monthlyPkg.product.price * 12)) *
+            100
+        )
+      : 50;
+
+  interface PlanDisplay {
+    label: string;
+    priceLabel: string;
+    period: string;
+    badge: string | null;
+    savings: string | null;
+    pkg: PurchasesPackage | null;
+  }
+
+  const plans: PlanDisplay[] = hasRealPackages
+    ? [
+        annualPkg
+          ? {
+              label: "Annual",
+              priceLabel: annualPkg.product.priceString + "/year",
+              period: `Just ${(annualPkg.product.price / 12).toFixed(2)}/mo`,
+              badge: "Best Value",
+              savings: `Save ${savingsPercent}%`,
+              pkg: annualPkg,
+            }
+          : null,
+        monthlyPkg
+          ? {
+              label: "Monthly",
+              priceLabel: monthlyPkg.product.priceString + "/mo",
+              period: "Cancel anytime",
+              badge: null,
+              savings: null,
+              pkg: monthlyPkg,
+            }
+          : null,
+      ].filter(Boolean) as PlanDisplay[]
+    : [
+        {
+          label: "Annual",
+          priceLabel: "£39.99/year",
+          period: "Just £3.33/mo",
+          badge: "Best Value",
+          savings: "Save 50%",
+          pkg: null,
+        },
+        {
+          label: "Monthly",
+          priceLabel: "£4.99/mo",
+          period: "Cancel anytime",
+          badge: null,
+          savings: null,
+          pkg: null,
+        },
+      ];
+
+  const features = [
+    { icon: "chatbubble-ellipses" as const, text: "Unlimited AI Coach conversations" },
+    { icon: "restaurant" as const, text: "Full recipe library + meal planner" },
+    { icon: "school" as const, text: "All investing lessons" },
+    { icon: "bar-chart" as const, text: "Investment simulators" },
+    { icon: "flag" as const, text: "Savings goals with progress tracking" },
+    { icon: "people" as const, text: "Family budget collaboration" },
+    { icon: "flash" as const, text: "Priority support & early access" },
   ];
 
   const handlePurchase = async () => {
+    const selectedPlan = plans[selectedIndex];
+    if (!selectedPlan?.pkg) {
+      Alert.alert(
+        "Not Available Yet",
+        "Subscriptions are being configured. Please check back soon!"
+      );
+      return;
+    }
+
     try {
-      const success = await purchasePackage(selectedPlan);
+      const success = await purchasePackage(selectedPlan.pkg);
       if (success) {
+        Alert.alert("Welcome to Premium!", "You now have full access to all features.");
         onClose();
       }
     } catch (error) {
@@ -84,11 +124,14 @@ export default function Paywall({ onClose, feature }: PaywallProps) {
   };
 
   const handleRestore = async () => {
-    await restorePurchases();
-    Alert.alert("Restored", "Your purchases have been restored.");
+    const restored = await restorePurchases();
+    if (restored) {
+      Alert.alert("Restored!", "Your premium access has been restored.");
+      onClose();
+    } else {
+      Alert.alert("No Purchases Found", "We couldn't find any previous purchases.");
+    }
   };
-
-  const isPro = selectedPlan.startsWith("pro");
 
   return (
     <ScrollView className="flex-1 bg-cream" showsVerticalScrollIndicator={false}>
@@ -96,62 +139,64 @@ export default function Paywall({ onClose, feature }: PaywallProps) {
         {/* Header */}
         <View className="items-center mb-6">
           <View className="w-16 h-16 rounded-full bg-primary-500 items-center justify-center mb-3">
-            <Ionicons name="star" size={32} color="#fff" />
+            <Ionicons name="star" size={32} color="#FCD34D" />
           </View>
           <Text className="text-2xl font-bold text-gray-900 text-center">
-            Unlock MumMoney {isPro ? "Pro" : "Plus"}
+            Unlock MumMoney Premium
           </Text>
           {feature && (
             <Text className="text-sm text-gray-500 text-center mt-1">
               Upgrade to access {feature}
             </Text>
           )}
+          <Text className="text-sm text-gray-400 text-center mt-1">
+            7-day free trial, cancel anytime
+          </Text>
         </View>
 
         {/* Features */}
         <View className="bg-white rounded-2xl p-5 mb-6 border border-gray-100">
           <Text className="text-base font-bold text-gray-900 mb-3">
-            {isPro ? "Pro includes everything:" : "Plus includes:"}
+            Premium includes:
           </Text>
-          {(isPro ? proExtras : plusFeatures).map((feature, i) => (
-            <View key={i} className="flex-row items-center mb-2.5">
-              <Ionicons
-                name="checkmark-circle"
-                size={18}
-                color={isPro ? "#EC4899" : "#2D6A4F"}
-              />
-              <Text className="text-sm text-gray-700 ml-2.5">{feature}</Text>
+          {features.map((f, i) => (
+            <View key={i} className="flex-row items-center mb-3">
+              <View className="w-8 h-8 rounded-full bg-primary-50 items-center justify-center">
+                <Ionicons name={f.icon} size={16} color="#2D6A4F" />
+              </View>
+              <Text className="text-sm text-gray-700 ml-3 flex-1">{f.text}</Text>
             </View>
           ))}
         </View>
 
         {/* Plan Selection */}
         <View className="gap-3 mb-6">
-          {plans.map((plan) => (
+          {plans.map((plan, index) => (
             <TouchableOpacity
-              key={plan.id}
+              key={plan.label}
+              activeOpacity={0.7}
               className={`flex-row items-center p-4 rounded-2xl border-2 ${
-                selectedPlan === plan.id
+                selectedIndex === index
                   ? "border-primary-500 bg-primary-50"
                   : "border-gray-200 bg-white"
               }`}
-              onPress={() => setSelectedPlan(plan.id)}
+              onPress={() => setSelectedIndex(index)}
             >
               <View
                 className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${
-                  selectedPlan === plan.id
+                  selectedIndex === index
                     ? "border-primary-500"
                     : "border-gray-300"
                 }`}
               >
-                {selectedPlan === plan.id && (
+                {selectedIndex === index && (
                   <View className="w-3 h-3 rounded-full bg-primary-500" />
                 )}
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center">
                   <Text className="text-base font-semibold text-gray-900">
-                    {plan.price}
+                    {plan.priceLabel}
                   </Text>
                   {plan.badge && (
                     <View className="bg-accent-500 rounded-full px-2 py-0.5 ml-2">
@@ -176,6 +221,7 @@ export default function Paywall({ onClose, feature }: PaywallProps) {
 
         {/* CTA */}
         <TouchableOpacity
+          activeOpacity={0.7}
           className="bg-primary-500 rounded-2xl py-4 items-center"
           onPress={handlePurchase}
           disabled={isLoading}
@@ -195,6 +241,7 @@ export default function Paywall({ onClose, feature }: PaywallProps) {
 
         {/* Restore */}
         <TouchableOpacity
+          activeOpacity={0.7}
           className="items-center mt-4 py-2"
           onPress={handleRestore}
         >
@@ -202,7 +249,11 @@ export default function Paywall({ onClose, feature }: PaywallProps) {
         </TouchableOpacity>
 
         {/* Close */}
-        <TouchableOpacity className="items-center mt-2 py-2" onPress={onClose}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          className="items-center mt-2 py-2"
+          onPress={onClose}
+        >
           <Text className="text-sm text-gray-400">Maybe later</Text>
         </TouchableOpacity>
       </View>
