@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     console.error("Edge function error:", error);
     return new Response(
       JSON.stringify({ reply: "Something went wrong. Please try again in a moment!" }),
-      { status: 500, headers: corsHeaders }
+      { headers: corsHeaders }
     );
   }
 });
