@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mummoney.app"
+      "bundleIdentifier": "com.mummoney.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -29,10 +32,17 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c5882652-e760-4115-ad1f-8032d2f66fd3"
+    },
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-secure-store",
+      "expo-updates",
       [
         "expo-notifications",
         {
@@ -40,6 +50,13 @@
           "color": "#2D6A4F"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c5882652-e760-4115-ad1f-8032d2f66fd3"
+      }
+    },
+    "owner": "aarav1656"
   }
 }

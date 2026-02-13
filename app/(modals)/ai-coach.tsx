@@ -13,7 +13,6 @@ import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
-import { supabase } from "@/lib/supabase";
 
 interface Message {
   id: string;
@@ -72,9 +71,17 @@ export default function AICoach() {
     setLoading(true);
 
     try {
-      // Call Supabase Edge Function for AI response
-      const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: {
+      const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+      const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             ...messages
@@ -88,14 +95,16 @@ export default function AICoach() {
             location: profile?.location,
             familySize: profile?.family_size,
           },
-        },
+        }),
       });
+
+      const data = await res.json();
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content:
-          data?.reply ??
+          data?.reply ||
           "I'm having trouble thinking right now. Please try again in a moment!",
       };
 
